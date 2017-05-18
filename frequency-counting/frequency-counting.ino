@@ -10,7 +10,7 @@ void init_counter();
 void start_counter();
 uint32_t end_counter(); //return value is the number of cycles on the input pin
 
-#define TEST_FREQUENCY_GENERATOR
+//#define TEST_FREQUENCY_GENERATOR
 
 //Arduino Mega hardware timer counter implementation
 #ifdef ARDUINO_AVR_MEGA2560
@@ -58,11 +58,41 @@ void init_test_frequency_generator() {
 #endif
 #else
 //TODO: Implement support for TINAH.
+void init_counter() {
+  //Don't want to generate a signal on a pin with this timer
+  TCCR3A = 0;
+  //Enable the timer overflow interrupt
+  TIMSK3 = _BV(TOIE3);
+  //Timer 3 uses pin 38 (PE6) as an external input
+  pinMode(38, INPUT);
+}
+
+//This interrupt runs everytime the counter overflows, giving 16 more bits to count with
+//in count_upper
+uint16_t count_overflow = 0;
+ISR(TIMER3_OVF_vect) {
+  count_overflow += 1;
+}
+
+void start_counter() {
+  //Reset timer value
+  TCNT3 = 0;
+  count_overflow = 0;
+  //Use digital pin 38 as the clock source, turning the timer into a counter of rising edges
+  TCCR3B = _BV(CS32)|_BV(CS31)|_BV(CS30);
+}
+
+uint32_t end_counter() {
+  //Disconnects all input sources to the timer
+  TCCR3B = 0;
+  //Return the timer value combined with the 16 overflow bits
+  return (((uint32_t)count_overflow) << 16) | TCNT3;
+}
 #endif
 
 void setup() {
   pinMode(13, INPUT);
-  Serial.begin(115200);
+  Serial.begin(9600);
   #ifdef TEST_FREQUENCY_GENERATOR
   init_test_frequency_generator();
   #endif
